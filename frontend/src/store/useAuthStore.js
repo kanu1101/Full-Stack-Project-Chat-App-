@@ -15,19 +15,25 @@ export const useAuthStore = create((set, get) => ({
   isCheckingAuth: true, // ✅ Important: must be true initially!
 
   checkAuth: async () => {
-    set({ isCheckingAuth: true }); // ✅ Explicitly start loading
-
+    set({ isCheckingAuth: true });
     try {
-      const res = await axiosInstance.get("/auth/check");
-      set({ authUser: res.data });
-      get().connectSocket();
+        const res = await axiosInstance.get("/auth/check");
+        if (res.data) {
+            set({ authUser: res.data });
+            get().connectSocket();   // only call if authUser valid
+        } else {
+            set({ authUser: null });
+            get().disconnectSocket();  // make sure no ghost socket
+        }
     } catch (error) {
-      console.log("Error in checkAuth: ", error);
-      set({ authUser: null });
+        console.log("Error in checkAuth: ", error);
+        set({ authUser: null });
+        get().disconnectSocket();  // again, disconnect
     } finally {
-      set({ isCheckingAuth: false }); // ✅ Done checking
+        set({ isCheckingAuth: false });
     }
   },
+
   signup: async (data) => {
     set({isSigningUp: true});
     try {
@@ -36,8 +42,8 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Account Created Successfully!");
       get().connectSocket();
     } catch (error) {
+      toast.error(error.response?.data?.message || "Signup failed!");
       console.log("Error in signup useAuthStore", error);
-      toast.error("error.response.data.message")
     }
     finally{
       set({isSigningUp : false});
@@ -94,15 +100,13 @@ export const useAuthStore = create((set, get) => ({
     });
     newSocket.connect();
     set({socket: newSocket});
-    socket.on("getOnlineUsers", (userIds) => {
+    newSocket.on("getOnlineUsers", (userIds) => {
       set({onlineUsers: userIds});
     })
   },
 
   disconnectSocket: () => {
     if(get().socket?.connected) get().socket?.disconnect();
-    socket.on("getOnlineUsers", (userIds) => {
-    set({onlineUsers: userIds});
-    })
+    set({socket: null});
   },
 }));
